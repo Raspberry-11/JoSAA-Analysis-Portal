@@ -2,3 +2,5 @@ pandas
 selenium
 beautifulsoup4
 lxml
+pymysql 
+sqlalchemy

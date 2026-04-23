@@ -37,7 +37,6 @@ The python pipeline constructs the MySQL database dynamically.
 3. Install dependencies:
    ```bash
    pip install -r requirements.txt
-   pip install pandas pymysql sqlalchemy
    ```
 4. Run the database migration script. This script will merge all 120,000+ CSV rows and auto-inject them into your MySQL server!
    ```bash
