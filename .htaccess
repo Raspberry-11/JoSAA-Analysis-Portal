@@ -1,0 +1,9 @@
+# Redirect all requests to the public/ folder
+# This way users can visit http://localhost/josaa-portal/
+# instead of http://localhost/josaa-portal/public/
+
+RewriteEngine On
+
+# Don't rewrite if already in public/
+RewriteCond %{REQUEST_URI} !public/
+RewriteRule ^(.*)$ public/$1 [L]

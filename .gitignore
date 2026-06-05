@@ -1,0 +1,18 @@
+.env
+/data/*.csv
+!/data/.gitkeep
+/vendor/
+/node_modules/
+*.log
+.DS_Store
+.idea/
+.vscode/
+/scratch/
+
+# Python / Django
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+staticfiles/
+db.sqlite3

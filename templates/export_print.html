@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ title }}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+  th { background: #f0f0f0; font-weight: bold; }
+  h2 { margin-bottom: 0.25rem; }
+  p { color: #666; margin-top: 0; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<h2>{{ title }}</h2>
+<p>Generated on {% now "Y-m-d H:i" %} | {{ rows|length }} rows</p>
+{% if rows %}
+<table>
+  <thead>
+    <tr>{% for key in rows.0.keys %}<th>{{ key }}</th>{% endfor %}</tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>{% for val in row.values %}<td>{{ val }}</td>{% endfor %}</tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No data to display.</p>
+{% endif %}
+<script>window.onload = () => window.print();</script>
+</body>
+</html>

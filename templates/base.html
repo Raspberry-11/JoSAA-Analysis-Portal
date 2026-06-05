@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}JOSAA Analytics{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
+<link href="{% static 'css/custom.css' %}" rel="stylesheet">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<nav class="navbar bg-white border-bottom shadow-sm px-4">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{% url 'index' %}" style="text-decoration: none;">
+      <span class="navbar-brand m-0 fw-bold" style="color: var(--brand);">JOSAA Analytics</span>
+    </a>
+    <span class="text-muted small">IIT Seat Allotment (Last Round Only)</span>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'ai_chat' %}" class="btn btn-sm {% if active == 'ai' %}btn-primary{% else %}btn-outline-primary{% endif %}">AI Analyst</a>
+    <a href="{% url 'dashboard' %}" class="btn btn-sm {% if active == 'dashboard' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Dashboard</a>
+    <a href="{% url 'predictor' %}" class="btn btn-sm {% if active == 'predictor' %}btn-success{% else %}btn-outline-success{% endif %}">Predictor</a>
+    <a href="{% url 'preference' %}" class="btn btn-sm {% if active == 'preference' %}btn-warning{% else %}btn-outline-warning{% endif %}">Preference Check</a>
+  </div>
+</nav>
+
+{% block content %}{% endblock %}
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>
