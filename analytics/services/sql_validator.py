@@ -17,7 +17,7 @@ class SqlValidator:
         'INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE', 'TRUNCATE',
         'RENAME', 'GRANT', 'REVOKE', 'REPLACE', 'MERGE', 'CALL', 'EXEC',
         'EXECUTE', 'PREPARE', 'DEALLOCATE', 'HANDLER', 'LOCK', 'UNLOCK',
-        'LOAD', 'OUTFILE', 'DUMPFILE', r'INTO\s+OUTFILE', r'INTO\s+DUMPFILE',
+        'LOAD', r'LOAD_FILE', 'OUTFILE', 'DUMPFILE', r'INTO\s+OUTFILE', r'INTO\s+DUMPFILE',
         r'SET\s+GLOBAL', r'SET\s+SESSION', 'SHOW', 'DESCRIBE', r'DESC\s',
         'EXPLAIN', r'USE\s+', 'BENCHMARK', 'SLEEP',
     ]
