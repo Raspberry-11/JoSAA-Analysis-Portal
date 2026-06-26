@@ -1,6 +1,3 @@
-import json
-
-
 GLOSSARY = {
     'iitg':   'Indian Institute of Technology Guwahati (NOT Gandhinagar)',
     'iitgn':  'Indian Institute of Technology Gandhinagar',
