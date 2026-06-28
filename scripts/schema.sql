@@ -1,6 +1,15 @@
 -- =====================================================================
 -- JOSAA Analytics Portal — Star Schema (Read-heavy OLAP)
 -- =====================================================================
+-- Apply once before running the app (the Django models are managed=False
+-- and map onto these tables):
+--
+--   mysql -u root -p < scripts/schema.sql
+--
+-- Then load data with:
+--
+--   python manage.py import_csv data/josaa_2016_2022.csv
+-- =====================================================================
 CREATE DATABASE IF NOT EXISTS josaa_portal
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE josaa_portal;

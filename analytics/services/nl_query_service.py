@@ -99,6 +99,12 @@ class NLQueryService:
             c.execute("DELETE FROM ai_queries WHERE cache_key = %s", [cache_key])
             return c.rowcount > 0
 
+    def clear_cache(self) -> int:
+        """Evict every cached AI response. Returns the number of rows removed."""
+        with connection.cursor() as c:
+            c.execute("DELETE FROM ai_queries")
+            return c.rowcount
+
     def recent_history(self, limit: int = 20) -> list:
         with connection.cursor() as c:
             c.execute(
@@ -176,7 +182,7 @@ class NLQueryService:
     def _system_prompt(self, golden_queries: list = None) -> str:
         schema = self._schema_context()
         examples = self._few_shot_examples(golden_queries or [])
-        return f"""You are a senior data analyst specializing in the JOSAA IIT seat allotment database (2016-2024).
+        return f"""You are a senior data analyst specializing in the JOSAA IIT seat allotment database (2016-2022).
 Your job: answer natural-language questions by writing **MySQL SELECT queries** AND providing a clear written interpretation of the results.
 
 # DATABASE SCHEMA
@@ -185,6 +191,7 @@ Your job: answer natural-language questions by writing **MySQL SELECT queries** 
 # BUSINESS RULES
 - The database has a star schema. `fact_allotment` is the fact table.
 - `is_preparatory = 1` rows are preparatory ranks. By default, EXCLUDE them unless the user explicitly asks.
+- `round_no` is the counselling round; the table holds ALL rounds. By DEFAULT, restrict to the FINAL round of each year with `(f.year, f.round_no) IN (SELECT year, MAX(round_no) FROM fact_allotment GROUP BY year)`, because the final round holds the definitive cutoffs. ONLY query other rounds when the user explicitly asks about rounds, round-wise/round-by-round trends, how ranks move across rounds, opening vs later rounds, or a specific round number.
 - `seat_type_code` common values: 'OPEN', 'OBC-NCL', 'SC', 'ST', 'EWS', 'OPEN (PwD)'. When users say "General" they mean 'OPEN'.
 - `gender_code` values: 'Gender-Neutral', 'Female-only (including Supernumerary)'.
 - `quota_code` values: 'AI' (All India), 'HS' (Home State), 'OS' (Other State), 'GO', 'JK', 'LA'.

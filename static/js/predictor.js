@@ -69,7 +69,7 @@ function setLoading(btnSelector, loading) {
 }
 
 // ---------------------------------------------------------
-// Populate dropdowns from /api.php?action=predictor_options
+// Populate dropdowns from /api?action=predictor_options
 // ---------------------------------------------------------
 async function loadPredictorOptions() {
   try {

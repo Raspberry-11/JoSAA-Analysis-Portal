@@ -510,7 +510,7 @@ $(document).on('click', '.ai-rate-good, .ai-rate-bad', async function () {
 $(document).on('click', '#ai-clear-cache', async function () {
   if (!confirm('Clear all cached AI responses? Fresh queries will be generated on next ask.')) return;
   try {
-    const res = await fetch('clear_cache.php');
+    const res = await fetch(`${AI_API}?action=ai_clear_cache`);
     if (res.ok) {
       $(this).text(' Cleared!').addClass('btn-success').removeClass('btn-outline-warning');
       setTimeout(() => $(this).text(' Clear Cache').removeClass('btn-success').addClass('btn-outline-warning'), 2000);

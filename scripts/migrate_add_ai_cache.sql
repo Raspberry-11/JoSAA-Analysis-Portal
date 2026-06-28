@@ -1,14 +1,11 @@
 -- =====================================================================
 -- Migration: Add AI Query Cache table
 -- =====================================================================
--- Run this ONLY if you already imported data using an older schema.sql
--- and don't want to re-import everything.
+-- Run this ONLY if you already imported data using an older schema
+-- and don't want to re-import everything:
 --
--- Via phpMyAdmin:
---   1. Select the josaa_portal database
---   2. Click the SQL tab
---   3. Paste and run this script
-
+--   mysql -u root -p josaa_portal < scripts/migrate_add_ai_cache.sql
+-- =====================================================================
 USE josaa_portal;
 
 CREATE TABLE IF NOT EXISTS ai_queries (
