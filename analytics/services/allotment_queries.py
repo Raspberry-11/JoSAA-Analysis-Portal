@@ -81,6 +81,48 @@ class AllotmentQueries:
         }
 
     @staticmethod
+    def get_cascading_filter_options(f: dict) -> dict:
+        """
+        Return the valid options for every filter GIVEN the current selection.
+        For each dimension, options = distinct values still present in
+        fact_allotment after applying all the OTHER active filters (so a user
+        can still widen/multi-select within the same dimension).
+        e.g. selecting an IIT narrows Branch to branches offered at that IIT.
+        """
+        dims = {
+            'iits':      ('JOIN dim_iit d ON f.iit_id = d.iit_id',
+                          'd.iit_id AS id, d.iit_name AS label', 'd.iit_name'),
+            'branches':  ('JOIN dim_branch d ON f.branch_id = d.branch_id',
+                          'd.branch_id AS id, d.branch_name AS label', 'd.branch_name'),
+            'quotas':    ('JOIN dim_quota d ON f.quota_id = d.quota_id',
+                          'd.quota_id AS id, d.quota_code AS label', 'd.quota_code'),
+            'seatTypes': ('JOIN dim_seat_type d ON f.seat_type_id = d.seat_type_id',
+                          'd.seat_type_id AS id, d.seat_type_code AS label', 'd.seat_type_code'),
+            'genders':   ('JOIN dim_gender d ON f.gender_id = d.gender_id',
+                          'd.gender_id AS id, d.gender_code AS label', 'd.gender_code'),
+        }
+        result = {}
+        with connection.cursor() as c:
+            for key, (join, select, order) in dims.items():
+                others = {k: v for k, v in f.items() if k != key}
+                where_sql, params = AllotmentQueries.build_filters(others)
+                c.execute(
+                    f"SELECT DISTINCT {select} FROM fact_allotment f {join} {where_sql} ORDER BY {order}",
+                    params,
+                )
+                result[key] = dictfetchall(c)
+
+            for key, col in (('years', 'f.year'), ('rounds', 'f.round_no')):
+                others = {k: v for k, v in f.items() if k != key}
+                where_sql, params = AllotmentQueries.build_filters(others)
+                c.execute(
+                    f"SELECT DISTINCT {col} FROM fact_allotment f {where_sql} ORDER BY {col}",
+                    params,
+                )
+                result[key] = [row[0] for row in c.fetchall()]
+        return result
+
+    @staticmethod
     def get_filtered_rows(f: dict, limit: int = 5000) -> list:
         where_sql, params = AllotmentQueries.build_filters(f)
         limit = max(1, min(int(limit), 20000))
@@ -138,28 +180,25 @@ class AllotmentQueries:
             return dictfetchall(c)
 
     @staticmethod
-    def toughest_branches(limit: int = 10) -> list:
-        limit = max(1, min(int(limit), 50))
-        sql = f"""WITH ranked AS (
-                      SELECT b.branch_name, f.closing_rank,
-                             ROW_NUMBER() OVER (PARTITION BY b.branch_id ORDER BY f.closing_rank) AS rn,
-                             COUNT(*)     OVER (PARTITION BY b.branch_id) AS cnt
-                      FROM fact_allotment f
-                      JOIN dim_branch b    ON f.branch_id = b.branch_id
-                      JOIN dim_seat_type s ON f.seat_type_id = s.seat_type_id
-                      JOIN dim_gender g    ON f.gender_id = g.gender_id
-                      WHERE s.seat_type_code = 'OPEN'
-                        AND g.gender_code = 'Gender-Neutral'
-                        AND f.is_preparatory = 0
-                        AND f.round_no = (SELECT MAX(round_no) FROM fact_allotment x WHERE x.year = f.year)
-                  )
-                  SELECT branch_name,
-                         AVG(CASE WHEN rn IN (FLOOR((cnt+1)/2), CEIL((cnt+1)/2))
-                                  THEN closing_rank END) AS median_close
-                  FROM ranked
-                  GROUP BY branch_name
-                  ORDER BY median_close ASC
-                  LIMIT {limit}"""
+    def common_branch_preference(min_iits: int = 10) -> list:
+        """Suggested general branch preference order: branches offered widely across
+        IITs (offered at >= min_iits IITs, e.g. CSE/Mech/Civil/Electrical), ranked by
+        overall average OPEN closing rank (lower = more preferred)."""
+        min_iits = max(1, min(int(min_iits), 30))
+        sql = f"""SELECT SUBSTRING_INDEX(b.branch_name, '(', 1) AS branch,
+                         COUNT(DISTINCT f.iit_id)   AS iit_coverage,
+                         ROUND(AVG(f.closing_rank)) AS avg_close
+                  FROM fact_allotment f
+                  JOIN dim_branch b    ON f.branch_id = b.branch_id
+                  JOIN dim_seat_type s ON f.seat_type_id = s.seat_type_id
+                  JOIN dim_gender g    ON f.gender_id = g.gender_id
+                  WHERE s.seat_type_code = 'OPEN'
+                    AND g.gender_code IN ('Gender-Neutral', 'NULL')
+                    AND f.is_preparatory = 0
+                    AND f.round_no = (SELECT MAX(round_no) FROM fact_allotment x WHERE x.year = f.year)
+                  GROUP BY branch
+                  HAVING iit_coverage >= {min_iits}
+                  ORDER BY avg_close ASC"""
         with connection.cursor() as c:
             c.execute(sql)
             return dictfetchall(c)
@@ -229,56 +268,22 @@ class AllotmentQueries:
             return dictfetchall(c)
 
     @staticmethod
-    def round_wise_drop() -> list:
-        sql = """WITH final_rounds AS (
-                     SELECT year, MAX(round_no) AS final_round
-                     FROM fact_allotment f
-                     GROUP BY year
-                     HAVING MAX(round_no) > 1
-                 ),
-                 round_inflation AS (
-                     SELECT r1.year,
-                            ROUND(AVG(CAST(rf.closing_rank AS SIGNED) - CAST(r1.closing_rank AS SIGNED))) AS avg_rank_inflation,
-                            COUNT(*) AS paired_samples,
-                            'round_1_to_final' AS metric_basis
-                     FROM final_rounds fr
-                     JOIN fact_allotment r1
-                       ON r1.year = fr.year AND r1.round_no = 1
-                     JOIN fact_allotment rf
-                       ON rf.year = r1.year
-                      AND rf.iit_id = r1.iit_id AND rf.branch_id = r1.branch_id
-                      AND rf.quota_id = r1.quota_id AND rf.seat_type_id = r1.seat_type_id
-                      AND rf.gender_id = r1.gender_id AND rf.round_no = fr.final_round
-                     JOIN dim_seat_type s ON r1.seat_type_id = s.seat_type_id
-                     JOIN dim_gender g    ON r1.gender_id = g.gender_id
-                     WHERE s.seat_type_code = 'OPEN'
-                       AND g.gender_code IN ('Gender-Neutral', 'NULL')
-                       AND r1.is_preparatory = 0 AND rf.is_preparatory = 0
-                     GROUP BY r1.year
-                 ),
-                 final_round_spread AS (
-                     SELECT f.year,
-                            ROUND(AVG(CAST(f.closing_rank AS SIGNED) - CAST(f.opening_rank AS SIGNED))) AS avg_rank_inflation,
-                            COUNT(*) AS paired_samples,
-                            'final_opening_to_closing' AS metric_basis
-                     FROM final_rounds fr
-                     JOIN fact_allotment f ON f.year = fr.year AND f.round_no = fr.final_round
-                     JOIN dim_seat_type s ON f.seat_type_id = s.seat_type_id
-                     JOIN dim_gender g    ON f.gender_id = g.gender_id
-                     WHERE s.seat_type_code = 'OPEN'
-                       AND g.gender_code IN ('Gender-Neutral', 'NULL')
-                       AND f.is_preparatory = 0
-                     GROUP BY f.year
-                 )
-                 SELECT year, avg_rank_inflation, paired_samples, metric_basis
-                 FROM round_inflation
-                 UNION ALL
-                 SELECT fs.year, fs.avg_rank_inflation, fs.paired_samples, fs.metric_basis
-                 FROM final_round_spread fs
-                 WHERE NOT EXISTS (
-                     SELECT 1 FROM round_inflation ri WHERE ri.year = fs.year
-                 )
-                 ORDER BY year"""
+    def old_vs_new_trend() -> list:
+        """Average OPEN closing rank for OLD vs NEW generation IITs, year over year.
+        Surfaces the prestige gap between the original 8 IITs and the newer ones."""
+        sql = """SELECT f.year, i.generation,
+                        ROUND(AVG(f.closing_rank)) AS avg_close,
+                        COUNT(*) AS samples
+                 FROM fact_allotment f
+                 JOIN dim_iit i       ON f.iit_id = i.iit_id
+                 JOIN dim_seat_type s ON f.seat_type_id = s.seat_type_id
+                 JOIN dim_gender g    ON f.gender_id = g.gender_id
+                 WHERE s.seat_type_code = 'OPEN'
+                   AND g.gender_code IN ('Gender-Neutral', 'NULL')
+                   AND f.is_preparatory = 0
+                   AND f.round_no = (SELECT MAX(round_no) FROM fact_allotment x WHERE x.year = f.year)
+                 GROUP BY f.year, i.generation
+                 ORDER BY f.year, i.generation"""
         with connection.cursor() as c:
             c.execute(sql)
             return dictfetchall(c)
@@ -328,48 +333,43 @@ class AllotmentQueries:
             return dictfetchall(c)
 
     @staticmethod
-    def highest_volatility(limit: int = 15) -> list:
-        limit = max(1, min(int(limit), 50))
-        sql = f"""SELECT i.iit_name, b.branch_name,
-                         ROUND(STDDEV_POP(yearly_avg)) AS volatility,
-                         ROUND(AVG(yearly_avg))         AS mean_close,
-                         COUNT(*) AS years_present
-                  FROM (
-                      SELECT f.iit_id, f.branch_id, f.year,
-                             AVG(f.closing_rank) AS yearly_avg
-                      FROM fact_allotment f
-                      JOIN dim_seat_type s ON f.seat_type_id = s.seat_type_id
-                      JOIN dim_gender g    ON f.gender_id = g.gender_id
-                      WHERE s.seat_type_code = 'OPEN'
-                        AND g.gender_code = 'Gender-Neutral'
-                        AND f.is_preparatory = 0
-                        AND f.round_no = (SELECT MAX(round_no) FROM fact_allotment x WHERE x.year = f.year)
-                      GROUP BY f.iit_id, f.branch_id, f.year
-                  ) t
-                  JOIN dim_iit i    ON t.iit_id = i.iit_id
-                  JOIN dim_branch b ON t.branch_id = b.branch_id
-                  GROUP BY i.iit_name, b.branch_name
-                  HAVING COUNT(*) >= 5
-                  ORDER BY volatility DESC
-                  LIMIT {limit}"""
+    def gender_gap_trend() -> list:
+        """CSE average closing rank: Gender-Neutral vs Female-only (supernumerary),
+        year over year. Shows the impact of the female-supernumerary scheme."""
+        sql = """SELECT f.year, g.gender_code,
+                        ROUND(AVG(f.closing_rank)) AS avg_close,
+                        COUNT(*) AS samples
+                 FROM fact_allotment f
+                 JOIN dim_branch b    ON f.branch_id = b.branch_id
+                 JOIN dim_seat_type s ON f.seat_type_id = s.seat_type_id
+                 JOIN dim_gender g    ON f.gender_id = g.gender_id
+                 WHERE b.category = 'cse_family'
+                   AND s.seat_type_code = 'OPEN'
+                   AND g.gender_code IN ('Gender-Neutral', 'Female-only (including Supernumerary)')
+                   AND f.is_preparatory = 0
+                   AND f.round_no = (SELECT MAX(round_no) FROM fact_allotment x WHERE x.year = f.year)
+                 GROUP BY f.year, g.gender_code
+                 ORDER BY f.year, g.gender_code"""
         with connection.cursor() as c:
             c.execute(sql)
             return dictfetchall(c)
 
     @staticmethod
-    def top100_monopoly() -> list:
-        sql = """SELECT i.iit_name, f.year, COUNT(*) AS top100_seats
+    def new_age_growth() -> list:
+        """Number of distinct new-age program offerings (AI / Data Science / Maths &
+        Computing) across IITs per year. Tracks the rise of CS-adjacent branches."""
+        sql = """SELECT f.year,
+                        COUNT(DISTINCT CONCAT(f.iit_id, '-', f.branch_id)) AS offerings,
+                        COUNT(DISTINCT f.iit_id) AS iits_offering
                  FROM fact_allotment f
-                 JOIN dim_iit i       ON f.iit_id = i.iit_id
+                 JOIN dim_branch b    ON f.branch_id = b.branch_id
                  JOIN dim_seat_type s ON f.seat_type_id = s.seat_type_id
-                 JOIN dim_gender g    ON f.gender_id = g.gender_id
-                 WHERE s.seat_type_code = 'OPEN'
-                   AND g.gender_code = 'Gender-Neutral'
-                   AND f.opening_rank <= 100
+                 WHERE b.category = 'new_age'
+                   AND s.seat_type_code = 'OPEN'
                    AND f.is_preparatory = 0
                    AND f.round_no = (SELECT MAX(round_no) FROM fact_allotment x WHERE x.year = f.year)
-                 GROUP BY i.iit_name, f.year
-                 ORDER BY f.year, top100_seats DESC"""
+                 GROUP BY f.year
+                 ORDER BY f.year"""
         with connection.cursor() as c:
             c.execute(sql)
             return dictfetchall(c)

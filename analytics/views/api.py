@@ -1,5 +1,5 @@
 """
-Single API dispatcher — mirrors api.php's ?action= routing.
+Single API dispatcher — all endpoints are routed through ?action=<name>.
 All POST endpoints are @csrf_exempt since this is a stateless JSON API.
 """
 import json
@@ -61,6 +61,10 @@ def dispatch(request):
             if action == 'ai_history':
                 return ok(nlq.recent_history())
 
+            if action == 'ai_clear_cache':
+                removed = nlq.clear_cache()
+                return ok({'message': f'Cleared {removed} cached responses.', 'removed': removed})
+
             if action == 'ai_rate':
                 payload = parse_body(request)
                 cache_key = payload.get('cache_key', '')
@@ -112,17 +116,18 @@ def dispatch(request):
         # ── Analytics routes
         analytics_map = {
             'filters': lambda p: AllotmentQueries.get_filter_options(),
+            'filter_options': lambda p: AllotmentQueries.get_cascading_filter_options(p),
             'rows':    lambda p: AllotmentQueries.get_filtered_rows(p),
             'q1_cse_trend':  lambda p: AllotmentQueries.cse_trend_top_iits(),
-            'q2_toughest':   lambda p: AllotmentQueries.toughest_branches(),
-            'q3_gender':     lambda p: AllotmentQueries.gender_supernumerary_impact(),
-            'q4_newage':     lambda p: AllotmentQueries.new_age_vs_core(),
-            'q5_hierarchy':  lambda p: AllotmentQueries.iit_preference_ranking(),
-            'q6_round_drop': lambda p: AllotmentQueries.round_wise_drop(),
-            'q7_tradeoff':   lambda p: AllotmentQueries.branch_vs_iit_tradeoff(),
-            'q8_category':   lambda p: AllotmentQueries.category_cutoff_gaps(),
-            'q9_volatility': lambda p: AllotmentQueries.highest_volatility(),
-            'q10_top100':    lambda p: AllotmentQueries.top100_monopoly(),
+            'q2_branch_order':   lambda p: AllotmentQueries.common_branch_preference(),
+            'q3_gender':         lambda p: AllotmentQueries.gender_supernumerary_impact(),
+            'q4_newage':         lambda p: AllotmentQueries.new_age_vs_core(),
+            'q5_hierarchy':      lambda p: AllotmentQueries.iit_preference_ranking(),
+            'q6_old_vs_new':     lambda p: AllotmentQueries.old_vs_new_trend(),
+            'q7_tradeoff':       lambda p: AllotmentQueries.branch_vs_iit_tradeoff(),
+            'q8_category':       lambda p: AllotmentQueries.category_cutoff_gaps(),
+            'q9_gender_gap':     lambda p: AllotmentQueries.gender_gap_trend(),
+            'q10_new_age_growth': lambda p: AllotmentQueries.new_age_growth(),
         }
 
         if action in analytics_map:
